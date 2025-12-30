@@ -1,9 +1,15 @@
+import os
 import logging
 
 from telegram import Update, ForceReply, InlineKeyboardMarkup, InlineKeyboardButton, ParseMode
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler
 import pandas as pd
 import random
+
+API_KEY = os.getenv("TELEGRAM_BOT_TOKEN")
+
+if not API_KEY:
+    raise RuntimeError("TELEGRAM_BOT_TOKEN not set")
 
 logger = logging.getLogger(__name__)
 
