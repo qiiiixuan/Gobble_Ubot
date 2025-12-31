@@ -1,4 +1,5 @@
 import os
+from dotenv import load_dotenv
 import logging
 
 from telegram import Update, ForceReply, InlineKeyboardMarkup, InlineKeyboardButton, ParseMode
@@ -6,6 +7,7 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, Callb
 import pandas as pd
 import random
 
+load_dotenv()
 API_KEY = os.getenv("TELEGRAM_BOT_TOKEN")
 
 if not API_KEY:
