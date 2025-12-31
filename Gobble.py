@@ -117,7 +117,7 @@ async def button_tap(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             userList.to_excel("Users.xlsx", sheet_name="User List", index=False)
 
     # Close the query to end the client-side loading animation
-    update.callback_query.answer()
+    await update.callback_query.answer()
 
     # Update message content with corresponding menu section
     text = await buildMenu(await randomIndex(userId))
