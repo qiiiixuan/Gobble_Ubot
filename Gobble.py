@@ -1,11 +1,10 @@
-import os
 from dotenv import load_dotenv
 import logging
-
-from telegram import Update, ForceReply, InlineKeyboardMarkup, InlineKeyboardButton, ParseMode
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler
+import os
 import pandas as pd
 import random
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, constants
+from telegram.ext import filters, MessageHandler, CallbackQueryHandler, ApplicationBuilder, ContextTypes, CommandHandler
 
 load_dotenv()
 API_KEY = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -13,6 +12,10 @@ API_KEY = os.getenv("TELEGRAM_BOT_TOKEN")
 if not API_KEY:
     raise RuntimeError("TELEGRAM_BOT_TOKEN not set")
 
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
 # Pre-assign button text
@@ -25,32 +28,32 @@ MENU_MARKUP = InlineKeyboardMarkup([[
     InlineKeyboardButton(PASS_BUTTON, callback_data=PASS_BUTTON)
 ]])
 
-def echo(update: Update, context: CallbackContext) -> None:
+async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     This function would be added to the dispatcher as a handler for messages coming from the Bot API
     """
 
-    update.message.copy(update.message.chat_id)
+    await update.message.copy(update.message.chat_id)
 
 
-def smash(update: Update, context: CallbackContext) -> None:
+async def smash(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Handles the /smash command
     """
 
     update.callback_query.data = SMASH_BUTTON
-    button_tap(update, context)
+    await button_tap(update, context)
 
 
-def passCommand(update: Update, context: CallbackContext) -> None:
+async def passCommand(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Handles /pass command
     """
 
     update.callback_query.data = PASS_BUTTON
-    button_tap(update, context)
+    await button_tap(update, context)
 
-def view(update: Update, context: CallbackContext) -> None:
+async def view(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Handles /view command, returns list of saved
     """
@@ -60,42 +63,42 @@ def view(update: Update, context: CallbackContext) -> None:
     id = userList['UserId'].tolist().index(userId)
     indexList = str.split(userList['Saved Restaurants'][id], ", ")
     indexList = list(map(lambda x: int(x), indexList))
-    context.bot.send_message(
+    await context.bot.send_message(
         update.message.from_user.id,
-        text=buildView(indexList),
-        parse_mode=ParseMode.HTML
+        text=await buildView(indexList),
+        parse_mode=constants.ParseMode.HTML
     )
 
 
-def start(update: Update, context: CallbackContext) -> None:
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Initializes list and sends menu
     """
 
-    userId = update.message.from_user.id
+    userId = update.effective_chat.id
     userList = pd.read_excel("Users.xlsx", sheet_name="User List")
     if userId not in userList['UserId'].values:
         newUser = pd.DataFrame({'UserId': [userId], 'Saved Restaurants': ['']})
         userList = pd.concat([userList, newUser], ignore_index=True)
         userList.to_excel("Users.xlsx", sheet_name="User List", index=False)
 
-    text = buildMenu(randomIndex(userId))
+    text = await buildMenu(await randomIndex(userId))
 
-    context.bot.send_message(
+    await context.bot.send_message(
         userId,
         text=text,
-        parse_mode=ParseMode.HTML,
+        parse_mode=constants.ParseMode.HTML,
         reply_markup=MENU_MARKUP if text != "Come back tomorrow for more!" else ""
     )
 
 
-def button_tap(update: Update, context: CallbackContext) -> None:
+async def button_tap(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Processes the inline buttons on the menu
     """
 
     data = update.callback_query.data
-    userId = update.callback_query.from_user.id
+    userId = update.effective_chat.id
 
     if data == SMASH_BUTTON:
         restaurantIndex = update.callback_query.message.text.split('\n')[0].__str__()
@@ -117,14 +120,14 @@ def button_tap(update: Update, context: CallbackContext) -> None:
     update.callback_query.answer()
 
     # Update message content with corresponding menu section
-    text = buildMenu(randomIndex(userId))
-    update.callback_query.message.edit_text(
+    text = await buildMenu(await randomIndex(userId))
+    await update.callback_query.edit_message_text(
         text= text,
-        parse_mode=ParseMode.HTML,
+        parse_mode=constants.ParseMode.HTML,
         reply_markup=MENU_MARKUP if text != "Come back tomorrow for more!" else ""
     )
 
-def randomIndex(userId: int) -> int:
+async def randomIndex(userId: int) -> int:
     """
     This function returns a random index for the restaurant list
     """
@@ -148,7 +151,7 @@ def randomIndex(userId: int) -> int:
     return randInt
 
 
-def buildMenu(index: int) -> str:
+async def buildMenu(index: int) -> str:
     """
     Builds the menu as text
     """
@@ -163,7 +166,7 @@ def buildMenu(index: int) -> str:
     
     return menu
 
-def buildView(indexList: list[int]) -> str:
+async def buildView(indexList: list[int]) -> str:
     """
     Builds a list of saved for view command
     """
@@ -178,30 +181,22 @@ def buildView(indexList: list[int]) -> str:
 
 
 def main() -> None:
-    updater = Updater(API_KEY)
-
-    # Get the dispatcher to register handlers
-    # Then, we register each handler and the conditions the update must meet to trigger it
-    dispatcher = updater.dispatcher
+    application = ApplicationBuilder().token(API_KEY).build()
 
     # Register commands
-    dispatcher.add_handler(CommandHandler("smash", smash))
-    dispatcher.add_handler(CommandHandler("pass", passCommand))
-    dispatcher.add_handler(CommandHandler("view", view))
-    dispatcher.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("smash", smash))
+    application.add_handler(CommandHandler("pass", passCommand))
+    application.add_handler(CommandHandler("view", view))
+    application.add_handler(CommandHandler("start", start))
 
     # Register handler for inline buttons
-    dispatcher.add_handler(CallbackQueryHandler(button_tap))
+    application.add_handler(CallbackQueryHandler(button_tap))
 
     # Echo any message that is not a command
-    dispatcher.add_handler(MessageHandler(~Filters.command, echo))
+    application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), echo))
 
     # Start the Bot
-    updater.start_polling()
-
-    # Run the bot until you press Ctrl-C
-    updater.idle()
-
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
